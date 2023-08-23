@@ -9,11 +9,29 @@ const success = (message, data) => {
   };
 };
 
-const failure = (message) => {
-  return {
-    success: false,
-    message: message,
-  };
+const failure = (res, code, message) => {
+  res.writeHead(code, { "Content-Type": "text/json" });
+  res.write(
+    JSON.stringify({
+      success: false,
+      message: message,
+    })
+  );
+  return res.end();
+};
+
+const validateProduct = (product) => {
+  if (
+    !product.hasOwnProperty("name") ||
+    !product.hasOwnProperty("price") ||
+    !product.hasOwnProperty("stock") ||
+    !product.hasOwnProperty("author") ||
+    product.hasOwnProperty("id")
+  ) {
+    return false;
+  }
+
+  return true;
 };
 
 const server = http.createServer(async function (req, res) {
@@ -26,36 +44,41 @@ const server = http.createServer(async function (req, res) {
     req.on("end", async () => {
       try {
         const newProduct = JSON.parse(body);
-        const result = await product.addProductData(newProduct);
-        
-        if (result) {
-          res.writeHead(200, { "Content-Type": "text/json" });
-          res.write(JSON.stringify(success("New product added.", newProduct)));
-          return res.end();
+
+        if (validateProduct(newProduct)) {
+          const result = await product.addProductData(newProduct);
+
+          if (result) {
+            res.writeHead(200, { "Content-Type": "text/json" });
+            res.write(
+              JSON.stringify(success("New product added.", newProduct))
+            );
+            return res.end();
+          } else {
+            failure(res, 500, "Failed to add product.");
+          }
         } else {
-          res.writeHead(500, { "Content-Type": "text/json" });
-          res.write(JSON.stringify(failure("Failed to add product.")));
-          return res.end();
+          failure(res, 400, "Invalid Data.");
         }
       } catch (error) {
-        console.error("Error parsing request body:", error);
-        res.writeHead(400, { "Content-Type": "text/json"});
-        res.write(JSON.stringify(failure("Invalid JSON data.")));
-        return res.end();
+        failure(res, 400, "Invalid JSON data.");
       }
     });
   } else if (req.url === "/products/all" && req.method === "GET") {
     try {
-      const allData = await product.getAllData();
-      res.writeHead(200, { "Content-Type": "text/json" });
-      res.write(JSON.stringify(success("All product data.", allData)));
-      return res.end();
+      const result = await product.getAllData();
+      if (result != false) {
+        res.writeHead(200, { "Content-Type": "text/json" });
+        res.write(JSON.stringify(success("All product data.", result)));
+        return res.end();
+      } else {
+        failure(res, 500, "Failed to get product data.");
+      }
     } catch (error) {
-      console.error("Error getting all data:", error);
-      res.writeHead(500, { "Content-Type": "text/json" });
-      res.write(JSON.stringify(failure("Failed to get product data.")));
-      return res.end();
+      failure(res, 500, "Failed to get product data.");
     }
+  } else {
+    failure(res, 500, "Invalid Request.");
   }
 });
 
